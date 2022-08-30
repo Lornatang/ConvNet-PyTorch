@@ -11,296 +11,142 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import math
 from functools import partial
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 
 import torch
 from torch import Tensor
 from torch import nn
-from torchvision.ops.misc import Conv2dNormActivation, SqueezeExcitation
+from torch.nn import functional as F
+from torchvision.ops.misc import Conv2dNormActivation, Permute
 from torchvision.ops.stochastic_depth import StochasticDepth
 
-from utils import make_divisible
-
 __all__ = [
-    "EfficientNetV2",
-    "efficientnet_v2_s", "efficientnet_v2_m", "efficientnet_v2_l",
+    "ConvNeXt",
+    "convnext_tiny", "convnext_small", "convnext_base", "convnext_large",
 ]
 
-efficientnet_v2_s_cfg = [
-    ["FusedMBConv", 1, 3, 1, 24, 24, 2],
-    ["FusedMBConv", 4, 3, 2, 24, 48, 4],
-    ["FusedMBConv", 4, 3, 2, 48, 64, 4],
-    ["MBConv", 4, 3, 2, 64, 128, 6],
-    ["MBConv", 6, 3, 1, 128, 160, 9],
-    ["MBConv", 6, 3, 2, 160, 256, 15],
+convnext_tiny_cfg = [
+    [96, 192, 3],
+    [192, 384, 3],
+    [384, 768, 9],
+    [768, None, 3],
 ]
 
-efficientnet_v2_m_cfg = [
-    ["FusedMBConv", 1, 3, 1, 24, 24, 3],
-    ["FusedMBConv", 4, 3, 2, 24, 48, 5],
-    ["FusedMBConv", 4, 3, 2, 48, 80, 5],
-    ["MBConv", 4, 3, 2, 80, 160, 7],
-    ["MBConv", 6, 3, 1, 160, 176, 14],
-    ["MBConv", 6, 3, 2, 176, 304, 18],
-    ["MBConv", 6, 3, 1, 304, 512, 5],
+convnext_small_cfg = [
+    [96, 192, 3],
+    [192, 384, 3],
+    [384, 768, 27],
+    [768, None, 3],
 ]
 
-efficientnet_v2_l_cfg = [
-    ["FusedMBConv", 1, 3, 1, 32, 32, 4],
-    ["FusedMBConv", 4, 3, 2, 32, 64, 7],
-    ["FusedMBConv", 4, 3, 2, 64, 96, 7],
-    ["MBConv", 4, 3, 2, 96, 192, 10],
-    ["MBConv", 6, 3, 1, 192, 224, 19],
-    ["MBConv", 6, 3, 2, 224, 384, 25],
-    ["MBConv", 6, 3, 1, 384, 640, 7],
+convnext_base_cfg = [
+    [128, 256, 3],
+    [256, 512, 3],
+    [512, 1024, 27],
+    [1024, None, 3],
+]
+
+convnext_large_cfg = [
+    [192, 384, 3],
+    [384, 768, 3],
+    [768, 1536, 27],
+    [1536, None, 3],
 ]
 
 
-class MBConv(nn.Module):
+class LayerNorm2d(nn.LayerNorm):
+    def forward(self, x: Tensor) -> Tensor:
+        out = x.permute(0, 2, 3, 1)
+        out = F.layer_norm(out, self.normalized_shape, self.weight, self.bias, self.eps)
+        out = out.permute(0, 3, 1, 2)
+
+        return out
+
+
+class CNBlock(nn.Module):
     def __init__(
             self,
-            in_channels: int,
-            out_channels: int,
-            kernel: int,
-            stride: int,
-            padding: int,
-            expand_ratio: float,
-            stochastic_depth_prob: float = 0.2,
+            channels: int,
+            layer_scale: float,
+            stochastic_depth_prob: float,
     ) -> None:
-        super(MBConv, self).__init__()
-        self.use_res_connect = stride == 1 and in_channels == out_channels
-        expanded_channels = make_divisible(in_channels * expand_ratio, 8, None)
+        super(CNBlock, self).__init__()
 
-        block: List[nn.Module] = []
-
-        # expand
-        if expanded_channels != in_channels:
-            block.append(
-                Conv2dNormActivation(
-                    in_channels,
-                    expanded_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    groups=1,
-                    norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                    activation_layer=partial(nn.SiLU, inplace=True),
-                    bias=False,
-                )
-            )
-
-        # depth-wise
-        block.append(
-            Conv2dNormActivation(
-                expanded_channels,
-                expanded_channels,
-                kernel_size=kernel,
-                stride=stride,
-                padding=padding,
-                groups=expanded_channels,
-                norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                activation_layer=partial(nn.SiLU, inplace=True),
-                bias=False,
-            )
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, (7, 7), (1, 1), (3, 3), groups=channels, bias=True),
+            Permute([0, 2, 3, 1]),
+            nn.LayerNorm(channels, eps=1e-6),
+            nn.Linear(channels, 4 * channels),
+            nn.GELU(),
+            nn.Linear(4 * channels, channels),
+            Permute([0, 3, 1, 2]),
         )
-
-        # squeeze and excitation
-        block.append(
-            SqueezeExcitation(
-                expanded_channels,
-                max(1, in_channels // 4),
-                activation=partial(nn.SiLU, inplace=True),
-            )
-        )
-
-        # project
-        block.append(
-            Conv2dNormActivation(
-                expanded_channels,
-                out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                groups=1,
-                norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                activation_layer=None,
-                bias=False,
-            )
-        )
-
-        self.block = nn.Sequential(*block)
+        self.layer_scale = nn.Parameter(torch.ones(channels, 1, 1) * layer_scale)
         self.stochastic_depth = StochasticDepth(stochastic_depth_prob, "row")
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
 
         out = self.block(x)
-        if self.use_res_connect:
-            out = self.stochastic_depth(out)
-            out = torch.add(out, identity)
+        out = torch.mul(out, self.layer_scale)
+        out = self.stochastic_depth(out)
+        out = torch.add(out, identity)
 
         return out
 
 
-class FusedMBConv(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            kernel: int,
-            stride: int,
-            padding: int,
-            expand_ratio: float,
-            stochastic_depth_prob: float = 0.2,
-    ) -> None:
-        super(FusedMBConv, self).__init__()
-        self.use_res_connect = stride == 1 and in_channels == out_channels
-        expanded_channels = make_divisible(in_channels * expand_ratio, 8, None)
-
-        block: List[nn.Module] = []
-
-        # expand
-        if expanded_channels != in_channels:
-            # fused expand
-            block.append(
-                Conv2dNormActivation(
-                    in_channels,
-                    expanded_channels,
-                    kernel_size=kernel,
-                    stride=stride,
-                    padding=padding,
-                    groups=1,
-                    norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                    activation_layer=partial(nn.SiLU, inplace=True),
-                    bias=False,
-                )
-            )
-
-            # project
-            block.append(
-                Conv2dNormActivation(
-                    expanded_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    groups=1,
-                    norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                    activation_layer=None,
-                    bias=False,
-                )
-            )
-        else:
-            block.append(
-                Conv2dNormActivation(
-                    in_channels,
-                    out_channels,
-                    kernel_size=kernel,
-                    stride=stride,
-                    padding=padding,
-                    groups=1,
-                    norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                    activation_layer=partial(nn.SiLU, inplace=True),
-                    bias=False,
-                )
-            )
-
-        self.block = nn.Sequential(*block)
-        self.stochastic_depth = StochasticDepth(stochastic_depth_prob, "row")
-
-    def forward(self, x: Tensor) -> Tensor:
-        identity = x
-
-        out = self.block(x)
-        if self.use_res_connect:
-            out = self.stochastic_depth(out)
-            out = torch.add(out, identity)
-
-        return out
-
-
-class EfficientNetV2(nn.Module):
+class ConvNeXt(nn.Module):
 
     def __init__(
             self,
-            arch_cfg: [Union[str, int, int, int, int, int, int]],
+            arch_cfg: [Union[int, Optional[int], int]],
             stochastic_depth_prob: float = 0.2,
-            dropout: float = 0.2,
+            layer_scale: float = 1e-6,
             num_classes: int = 1000,
     ) -> None:
-        super(EfficientNetV2, self).__init__()
-
+        super(ConvNeXt, self).__init__()
         features: List[nn.Module] = [Conv2dNormActivation(
             3,
-            arch_cfg[0][4],
-            kernel_size=3,
-            stride=2,
-            padding=1,
+            arch_cfg[0][0],
+            kernel_size=4,
+            stride=4,
+            padding=0,
             groups=1,
-            norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-            activation_layer=partial(nn.SiLU, inplace=True),
-            bias=False,
+            norm_layer=partial(LayerNorm2d, eps=1e-6),
+            activation_layer=None,
+            bias=True,
         )]
 
-        total_stage_blocks = sum(int(math.ceil(cfg[6])) for cfg in arch_cfg)
+        total_stage_blocks = sum(cfg[2] for cfg in arch_cfg)
         stage_block_id = 0
         for cfg in arch_cfg:
             stage: List[nn.Module] = []
-            for _ in range(int(math.ceil(cfg[6]))):
-                # Chose feature block
-                if cfg[0] == "MBConv":
-                    block = MBConv
-                else:
-                    block = FusedMBConv
-                # overwrite info if not the first conv in the stage
-                if stage:
-                    cfg[4] = cfg[5]
-                    cfg[3] = 1
-
+            for _ in range(cfg[2]):
                 # adjust stochastic depth probability based on the depth of the stage block
-                sd_prob = stochastic_depth_prob * float(stage_block_id) / total_stage_blocks
-
-                stage.append(
-                    block(
-                        cfg[4],
-                        cfg[5],
-                        cfg[2],
-                        cfg[3],
-                        cfg[2] // 2,
-                        cfg[1],
-                        sd_prob,
-                    )
-                )
+                sd_prob = stochastic_depth_prob * stage_block_id / (total_stage_blocks - 1.0)
+                stage.append(CNBlock(cfg[0], layer_scale, sd_prob))
                 stage_block_id += 1
 
             features.append(nn.Sequential(*stage))
-
-        # building last several layers
-        last_in_channels = make_divisible(arch_cfg[-1][5], 8, None)
-        last_out_channels = 1280
-        features.append(
-            Conv2dNormActivation(
-                last_in_channels,
-                last_out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                groups=1,
-                norm_layer=partial(nn.BatchNorm2d, eps=0.001),
-                activation_layer=partial(nn.SiLU, inplace=True),
-                bias=False,
-            )
-        )
+            if cfg[1] is not None:
+                # Downsampling
+                features.append(
+                    nn.Sequential(
+                        LayerNorm2d(cfg[0]),
+                        nn.Conv2d(cfg[0], cfg[1], (2, 2), (2, 2), (0, 0)),
+                    )
+                )
 
         self.features = nn.Sequential(*features)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
+        last_channels = arch_cfg[-1][1] if arch_cfg[-1][1] is not None else arch_cfg[-1][0]
         self.classifier = nn.Sequential(
-            nn.Dropout(dropout, True),
-            nn.Linear(last_out_channels, num_classes),
+            LayerNorm2d(last_channels),
+            nn.Flatten(1),
+            nn.Linear(last_channels, num_classes)
         )
 
         # Initialize neural network weights
@@ -315,39 +161,37 @@ class EfficientNetV2(nn.Module):
     def _forward_impl(self, x: Tensor) -> Tensor:
         out = self.features(x)
         out = self.avgpool(out)
-        out = torch.flatten(out, 1)
         out = self.classifier(out)
 
         return out
 
     def _initialize_weights(self) -> None:
         for module in self.modules():
-            if isinstance(module, nn.Conv2d):
-                nn.init.kaiming_normal_(module.weight, mode="fan_out")
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.trunc_normal_(module.weight, std=0.02)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
-            elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Linear):
-                init_range = 1.0 / math.sqrt(module.out_features)
-                nn.init.uniform_(module.weight, -init_range, init_range)
-                nn.init.zeros_(module.bias)
 
 
-def efficientnet_v2_s(**kwargs: Any) -> EfficientNetV2:
-    model = EfficientNetV2(efficientnet_v2_s_cfg, 0.2, 0.2, **kwargs)
+def convnext_tiny(**kwargs: Any) -> ConvNeXt:
+    model = ConvNeXt(convnext_tiny_cfg, 0.1, **kwargs)
 
     return model
 
 
-def efficientnet_v2_m(**kwargs: Any) -> EfficientNetV2:
-    model = EfficientNetV2(efficientnet_v2_m_cfg, 0.2, 0.3, **kwargs)
+def convnext_small(**kwargs: Any) -> ConvNeXt:
+    model = ConvNeXt(convnext_small_cfg, 0.4, **kwargs)
 
     return model
 
 
-def efficientnet_v2_l(**kwargs: Any) -> EfficientNetV2:
-    model = EfficientNetV2(efficientnet_v2_l_cfg, 0.2, 0.4, **kwargs)
+def convnext_base(**kwargs: Any) -> ConvNeXt:
+    model = ConvNeXt(convnext_base_cfg, 0.5, **kwargs)
+
+    return model
+
+
+def convnext_large(**kwargs: Any) -> ConvNeXt:
+    model = ConvNeXt(convnext_large_cfg, 0.5, **kwargs)
 
     return model

@@ -26,7 +26,7 @@ device = torch.device("cuda", 0)
 # Turning on when the image size does not change during training can speed up training
 cudnn.benchmark = True
 # Model arch name
-model_arch_name = "efficientnet_v2_s"
+model_arch_name = "convnext_tiny"
 # Model normalization parameters
 model_mean_parameters = [0.485, 0.456, 0.406]
 model_std_parameters = [0.229, 0.224, 0.225]
@@ -42,13 +42,13 @@ if mode == "train":
     train_image_dir = "./data/ImageNet_1K/ILSVRC2012_img_train"
     valid_image_dir = "./data/ImageNet_1K/ILSVRC2012_img_val"
 
-    resize_size = 384
-    crop_size = 384
+    resize_size = 236
+    crop_size = 224
     batch_size = 128
     num_workers = 4
 
     # The address to load the pretrained model
-    pretrained_model_weights_path = "./results/pretrained_models/efficientnet_v2_s-ImageNet_1K-54492891.pth.tar"
+    pretrained_model_weights_path = "./results/pretrained_models/ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar"
 
     # Incremental training and migration training
     resume = ""
@@ -80,12 +80,12 @@ if mode == "test":
     test_image_dir = "./data/ImageNet_1K/ILSVRC2012_img_val"
 
     # Test dataloader parameters
-    resize_size = 384
-    crop_size = 384
+    resize_size = 236
+    crop_size = 224
     batch_size = 128
     num_workers = 4
 
     # How many iterations to print the testing result
     test_print_frequency = 20
 
-    model_weights_path = "./results/pretrained_models/efficientnet_v2_s-ImageNet_1K-54492891.pth.tar"
+    model_weights_path = "./results/pretrained_models/ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar"

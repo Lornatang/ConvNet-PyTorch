@@ -1,13 +1,13 @@
-# EfficientNetV2-PyTorch
+# ConvNext-PyTorch
 
 ## Overview
 
 This repository contains an op-for-op PyTorch reimplementation
-of [EfficientNetV2: Smaller Models and Faster Training](https://arxiv.org/pdf/2104.00298v3.pdf).
+of [A ConvNet for the 2020s](https://arxiv.org/pdf/2201.03545v2.pdf).
 
 ## Table of contents
 
-- [EfficientNetV2-PyTorch](#efficientnetv2-pytorch)
+- [ConvNext-PyTorch](#convnext-pytorch)
     - [Overview](#overview)
     - [Table of contents](#table-of-contents)
     - [Download weights](#download-weights)
@@ -19,7 +19,7 @@ of [EfficientNetV2: Smaller Models and Faster Training](https://arxiv.org/pdf/21
     - [Result](#result)
     - [Contributing](#contributing)
     - [Credit](#credit)
-        - [EfficientNetV2: Smaller Models and Faster Training](#efficientnetv2-smaller-models-and-faster-training)
+        - [A ConvNet for the 2020s](#a-convnet-for-the-2020s)
 
 ## Download weights
 
@@ -41,12 +41,12 @@ Both training and testing only need to modify the `config.py` file.
 
 ### Test
 
-- line 29: `model_arch_name` change to `efficientnet_v2_s`.
+- line 29: `model_arch_name` change to `convnext_tiny`.
 - line 31: `model_mean_parameters` change to `[0.485, 0.456, 0.406]`.
 - line 32: `model_std_parameters` change to `[0.229, 0.224, 0.225]`.
 - line 34: `model_num_classes` change to `1000`.
 - line 36: `mode` change to `test`.
-- line 91: `model_weights_path` change to `./results/pretrained_models/EfficientNetV2_S-ImageNet_1K-a93bc34c.pth.tar`.
+- line 91: `model_weights_path` change to `./results/pretrained_models/ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar`.
 
 ```bash
 python3 test.py
@@ -54,12 +54,13 @@ python3 test.py
 
 ### Train model
 
-- line 29: `model_arch_name` change to `efficientnet_v2_s`.
+- line 29: `model_arch_name` change to `convnext_tiny`.
 - line 31: `model_mean_parameters` change to `[0.485, 0.456, 0.406]`.
 - line 32: `model_std_parameters` change to `[0.229, 0.224, 0.225]`.
 - line 34: `model_num_classes` change to `1000`.
 - line 36: `mode` change to `train`.
-- line 51: `pretrained_model_weights_path` change to `./results/pretrained_models/EfficientNetV2_S-ImageNet_1K-a93bc34c.pth.tar`.
+- line 51: `pretrained_model_weights_path` change
+  to `./results/pretrained_models/ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar`.
 
 ```bash
 python3 train.py
@@ -67,12 +68,12 @@ python3 train.py
 
 ### Resume train model
 
-- line 29: `model_arch_name` change to `efficientnet_v2_s`.
+- line 29: `model_arch_name` change to `convnext_tiny`.
 - line 31: `model_mean_parameters` change to `[0.485, 0.456, 0.406]`.
 - line 32: `model_std_parameters` change to `[0.229, 0.224, 0.225]`.
 - line 34: `model_num_classes` change to `1000`.
 - line 36: `mode` change to `train`.
-- line 54: `resume` change to `./samples/efficientnet_v2_s-ImageNet_1K/epoch_xxx.pth.tar`.
+- line 54: `resume` change to `./samples/convnext_tiny-ImageNet_1K/epoch_xxx.pth.tar`.
 
 ```bash
 python3 train.py
@@ -80,19 +81,19 @@ python3 train.py
 
 ## Result
 
-Source of original paper results: [https://arxiv.org/pdf/2104.00298v3.pdf](https://arxiv.org/pdf/2104.00298v3.pdf))
+Source of original paper results: [https://arxiv.org/pdf/2201.03545v2.pdf](https://arxiv.org/pdf/2201.03545v2.pdf))
 
 In the following table, the top-x error value in `()` indicates the result of the project, and `-` indicates no test.
 
-|       Model       |   Dataset   | Top-1 error (val) | Top-5 error (val) |
-|:-----------------:|:-----------:|:-----------------:|:-----------------:|
-| efficientnet_v2_s | ImageNet_1K | 16.1%(**15.7%**)  |    -(**3.1%**)    |
-| efficientnet_v2_m | ImageNet_1K | 14.9%(**14.9%**)  |    -(**2.8%**)    |
-| efficientnet_v2_l | ImageNet_1K | 114.2%(**14.2%**) |    -(**2.2%**)    |
-
+|     Model      |   Dataset   | Top-1 error (val) | Top-5 error (val) |
+|:--------------:|:-----------:|:-----------------:|:-----------------:|
+| convnext_tiny  | ImageNet_1K | 17.9%(**17.5%**)  |    -(**3.9%**)    |
+| convnext_small | ImageNet_1K | 16.9%(**16.4%**)  |    -(**3.4%**)    |
+| convnext_base  | ImageNet_1K | 15.9%(**15.9%**)  |    -(**3.1%**)    |
+| convnext_large | ImageNet_1K | 14.5%(**15.6%**)  |    -(**3.0%**)    |
 
 ```bash
-# Download `EfficientNetV2_S-ImageNet_1K-a93bc34c.pth.tar` weights to `./results/pretrained_models`
+# Download `ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar` weights to `./results/pretrained_models`
 # More detail see `README.md<Download weights>`
 python3 ./inference.py 
 ```
@@ -104,13 +105,13 @@ Input:
 Output:
 
 ```text
-Build `efficientnet_v2_s` model successfully.
-Load `efficientnet_v2_s` model weights `/EfficientNetV2-PyTorch/results/pretrained_models/EfficientNetV2_S-ImageNet_1K-a93bc34c.pth.tar` successfully.
-tench, Tinca tinca                                                          (79.91%)
-barracouta, snoek                                                           (0.65%)
-gar, garfish, garpike, billfish, Lepisosteus osseus                         (0.14%)
-sturgeon                                                                    (0.14%)
-coho, cohoe, coho salmon, blue jack, silver salmon, Oncorhynchus kisutch    (0.11%)
+Build `convnext_tiny` model successfully.
+Load `convnext_tiny` model weights `/ConvNext-PyTorch/results/pretrained_models/ConvNext_tiny-ImageNet_1K-b03a77c2.pth.tar` successfully.
+tench, Tinca tinca                                                          (38.61%)
+barracouta, snoek                                                           (2.95%)
+gar, garfish, garpike, billfish, Lepisosteus osseus                         (0.53%)
+reel                                                                        (0.52%)
+croquet ball                                                                (0.36%)
 ```
 
 ## Contributing
@@ -122,34 +123,34 @@ I look forward to seeing what the community does with these models!
 
 ### Credit
 
-#### EfficientNetV2: Smaller Models and Faster Training
+#### A ConvNet for the 2020s
 
-*Mingxing Tan, Quoc V. Le*
+*Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, Saining Xie*
 
 ##### Abstract
 
-This paper introduces EfficientNetV2, a new family of convolutional networks that have faster training speed and better
-parameter efficiency than previous models. To develop this family of models, we use a combination of training-aware
-neural architecture search and scaling, to jointly optimize training speed and parameter efficiency. The models were
-searched from the search space enriched with new ops such as Fused-MBConv. Our experiments show that EfficientNetV2
-models train much faster than state-of-the-art models while being up to 6.8x smaller.
-Our training can be further sped up by progressively increasing the image size during training, but it often causes a
-drop in accuracy. To compensate for this accuracy drop, we propose to adaptively adjust regularization (e.g., dropout
-and data augmentation) as well, such that we can achieve both fast training and good accuracy.
-With progressive learning, our EfficientNetV2 significantly outperforms previous models on ImageNet and
-CIFAR/Cars/Flowers datasets. By pretraining on the same ImageNet21k, our EfficientNetV2 achieves 87.3% top-1 accuracy on
-ImageNet ILSVRC2012, outperforming the recent ViT by 2.0% accuracy while training 5x-11x faster using the same computing
-resources. Code will be available at [this https URL](https://github.com/google/automl/tree/master/efficientnetv2).
+The "Roaring 20s" of visual recognition began with the introduction of Vision Transformers (ViTs), which quickly
+superseded ConvNets as the state-of-the-art image classification model. A vanilla ViT, on the other hand, faces
+difficulties when applied to general computer vision tasks such as object detection and semantic segmentation. It is the
+hierarchical Transformers (e.g., Swin Transformers) that reintroduced several ConvNet priors, making Transformers
+practically viable as a generic vision backbone and demonstrating remarkable performance on a wide variety of vision
+tasks. However, the effectiveness of such hybrid approaches is still largely credited to the intrinsic superiority of
+Transformers, rather than the inherent inductive biases of convolutions. In this work, we reexamine the design spaces
+and test the limits of what a pure ConvNet can achieve. We gradually "modernize" a standard ResNet toward the design of
+a vision Transformer, and discover several key components that contribute to the performance difference along the way.
+The outcome of this exploration is a family of pure ConvNet models dubbed ConvNeXt. Constructed entirely from standard
+ConvNet modules, ConvNeXts compete favorably with Transformers in terms of accuracy and scalability, achieving 87.8%
+ImageNet top-1 accuracy and outperforming Swin Transformers on COCO detection and ADE20K segmentation, while maintaining
+the simplicity and efficiency of standard ConvNets.
 
-[[Paper]](https://arxiv.org/pdf/2104.00298v3.pdf)
+[[Paper]](https://arxiv.org/pdf/2201.03545v2.pdf)
 
 ```bibtex
-@inproceedings{tan2021efficientnetv2,
-  title={Efficientnetv2: Smaller models and faster training},
-  author={Tan, Mingxing and Le, Quoc},
-  booktitle={International Conference on Machine Learning},
-  pages={10096--10106},
-  year={2021},
-  organization={PMLR}
+@inproceedings{liu2022convnet,
+  title={A convnet for the 2020s},
+  author={Liu, Zhuang and Mao, Hanzi and Wu, Chao-Yuan and Feichtenhofer, Christoph and Darrell, Trevor and Xie, Saining},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={11976--11986},
+  year={2022}
 }
 ```
